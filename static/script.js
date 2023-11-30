@@ -18,6 +18,11 @@ const STATE = {
   connected: false,
 };
 
+function setConnectedStatus(status) {
+  STATE.connected = status;
+  statusDiv.className = status ? 'connected' : 'reconnecting';
+}
+
 const changeRoom = (room) => {
   if (STATE.currentRoom === room) return;
 
@@ -36,7 +41,6 @@ const changeRoom = (room) => {
     messagesDiv.removeChild(msg);
   });
 
-  socket.emit('change-room', room);
   STATE[room].forEach((data) =>
     sendMessageToRoom({ room, username: data.username, message: data.message })
   );
@@ -50,7 +54,10 @@ function createRoom(name) {
 
   const node = roomTemplate.content.cloneNode(true);
   const room = node.querySelector('.room');
-  room.addEventListener('click', () => changeRoom(name));
+  room.addEventListener('click', (e) => {
+    e.preventDefault();
+    changeRoom(name);
+  });
   room.textContent = name;
   room.dataset.name = name;
   roomListDiv.appendChild(node);
@@ -58,6 +65,15 @@ function createRoom(name) {
   STATE[name] = [];
   changeRoom(name);
   return true;
+}
+
+function mountUiMessage({ username, message }) {
+  const newMessageNode = messageTemplate.content.cloneNode(true);
+
+  newMessageNode.querySelector('.message .username').textContent = username;
+  newMessageNode.querySelector('.message .username').style.color = '#32a852';
+  newMessageNode.querySelector('.message .text').textContent = message;
+  messagesDiv.appendChild(newMessageNode);
 }
 
 function sendMessageToRoom({
@@ -71,46 +87,14 @@ function sendMessageToRoom({
   }
 
   if (STATE.currentRoom === room) {
-    const node = messageTemplate.content.cloneNode(true);
-
-    node.querySelector('.message .username').textContent = username;
-    node.querySelector('.message .username').style.color = '#32a852';
-    node.querySelector('.message .text').textContent = message;
-    messagesDiv.appendChild(node);
-
-    try {
-      socket.emit('message', { room, username, value: message });
-    } catch (error) {
-      console.error(error);
-    }
+    mountUiMessage({ username, message });
+    socket.emit('message', { room, username, message });
   }
-
-  socket.on('message', (data) => {
-    console.log(data);
-  });
-}
-
-function setConnectedStatus(status) {
-  STATE.connected = status;
-  statusDiv.className = status ? 'connected' : 'reconnecting';
 }
 
 function init() {
-  socket.emit('ping', 'oi');
-
-  socket.on('ping', (data) => {
-    console.log(data);
-  });
-
   createRoom('Inicio');
-  sendMessageToRoom({
-    room: 'Inicio',
-    username: 'O Criador',
-    message: 'Abra outra aba e sinta o poder',
-    pushToOtherRoom: true,
-  });
 
-  // setup dos forms
   newMessageForm.addEventListener('submit', (e) => {
     e.preventDefault();
 
@@ -140,6 +124,16 @@ function init() {
       message: 'Olha só, uma sala novinha! Nice.',
       pushToOtherRoom: true,
     });
+  });
+
+  socket.on('message', (event) => {
+    const { message, room, username } = event;
+
+    if (!message || !room || !username) {
+      return;
+    }
+
+    mountUiMessage({ username, message });
   });
 
   setConnectedStatus(true);
